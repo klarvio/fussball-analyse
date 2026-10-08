@@ -1,5 +1,5 @@
 <!DOCTYPE html><html lang="de"><head><meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1"><title>Anstoß Analyse</title>
+<meta name="viewport" content="width=device-width, initial-scale=1"><title>Klarvio Fußball</title>
 <style>
 :root{--bg:#F5F3FA;--card:#fff;--ink:#231942;--mute:#645C7D;--line:#DDD8EA;--teal:#0F8B8D;--soft:#E3F3F3;--warn:#FFE9A8;--wi:#4A3A00}
 @media(prefers-color-scheme:dark){:root{--bg:#14102A;--card:#1E1940;--ink:#F0EDFA;--mute:#A9A2C4;--line:#322B5C;--teal:#4FD1D3;--soft:#1C3A4A;--warn:#4A3A00;--wi:#FFE9A8}}
@@ -15,24 +15,26 @@ summary{list-style:none;cursor:pointer;padding:14px;display:grid;gap:4px}summary
 .b{display:grid;grid-template-columns:90px 1fr 40px;gap:8px;align-items:center;font-size:.85rem;margin-top:6px}
 .tr{height:10px;background:var(--soft);border-radius:6px;overflow:hidden}.f{height:100%;background:var(--teal)}
 .tip{background:var(--soft);border-radius:10px;padding:10px 12px;margin-top:14px}.tip small{display:block;color:var(--mute)}
+.no{color:var(--mute);font-size:.88rem;margin-top:12px}
 footer{margin-top:24px;font-size:.8rem;color:var(--mute)}
 </style></head><body><main>
-<h1>Anstoß Analyse</h1>
-<div class="w">Nur ab 18. Unverbindliche Analysen einer KI auf Basis von Tabellendaten. Keine Garantie, Wetten können zu Verlusten führen.</div>
+<h1>Klarvio Fußball</h1>
+<div class="w">Nur ab 18. Informationen auf Basis von Tabellendaten, teils mit unverbindlicher KI-Analyse. Keine Garantie, Wetten können zu Verlusten führen.</div>
 <div class="s" id="u"></div><div class="l" id="l"></div>
 <footer>Keine Gewinnversprechen. Spielen kann süchtig machen. Hilfe: 0800 1 37 27 00 (BZgA), check-dein-spiel.de.</footer></main>
 <script>
-const D={"matches": {}, "updated": "08.10.2026 17:19", "new": []};
+const D={"matches": {}, "updated": "08.10.2026 18:21", "new": []};
 const E=s=>String(s).replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
 const L=["Heimsieg","Unentschieden","Auswärtssieg"];
-document.getElementById("u").textContent="Zuletzt aktualisiert: "+D.updated+" Uhr. Neue Analyse jede Stunde.";
-const items=Object.entries(D.matches).sort((a,b)=>a[1].ts<b[1].ts?-1:1).filter(x=>x[1].analyse);
+document.getElementById("u").textContent="Zuletzt aktualisiert: "+D.updated+" Uhr. Neue Daten jede Stunde.";
+const items=Object.entries(D.matches).sort((a,b)=>a[1].ts<b[1].ts?-1:1);
 document.getElementById("l").innerHTML=items.length?items.map(([id,m])=>`<details><summary>
 <div class="m"><span>${E(m.liga)} · ${E(m.zeit)} Uhr${m.score?" · Ergebnis "+E(m.score):""}</span>${(D.new||[]).includes(id)?'<span class="n">Neu</span>':""}</div>
-<div class="t">${E(m.heim)} – ${E(m.gast)}</div><div class="k">Unverbindliche Einschätzung: ${E(m.tipp)}</div></summary>
-<div class="d"><h3>Fakten</h3><ul>${m.fakten.map(f=>`<li>${E(f)}</li>`).join("")}</ul>
-<h3>Analyse</h3><p>${E(m.analyse)}</p><h3>Modellschätzung</h3>
+<div class="t">${E(m.heim)} – ${E(m.gast)}</div>${m.tipp?`<div class="k">Unverbindliche Einschätzung: ${E(m.tipp)}</div>`:""}</summary>
+<div class="d"><h3>Fakten</h3><ul>${(m.fakten||[]).map(f=>`<li>${E(f)}</li>`).join("")}</ul>
+${m.analyse?`<h3>Analyse</h3><p>${E(m.analyse)}</p><h3>Modellschätzung</h3>
 ${m.p.map((v,i)=>`<div class="b"><span>${L[i]}</span><div class="tr"><div class="f" style="width:${+v}%"></div></div><span>${+v} %</span></div>`).join("")}
-<div class="tip"><b>${E(m.tipp)}</b> (${E(m.note)})<small>Unverbindlich, ohne Gewähr. Kein Ergebnis ist sicher.</small></div></div></details>`).join("")
+<div class="tip"><b>${E(m.tipp)}</b> (${E(m.note)})<small>Unverbindlich, ohne Gewähr. Kein Ergebnis ist sicher.</small></div>`
+:'<p class="no">Die KI-Analyse ist noch nicht aktiviert.</p>'}</div></details>`).join("")
 :'<p class="s">Heute keine Spiele in den ausgewählten Ligen.</p>';
 </script></body></html>
