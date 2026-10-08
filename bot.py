@@ -1,14 +1,18 @@
-"""Fussball-Analyse-Bot: holt Spiele, lässt Claude analysieren, baut docs/index.html, meldet per Telegram."""
-import os, json, datetime as dt, requests, anthropic
+"""Fussball-Bot: holt Spiele, zeigt Fakten aus der Tabelle, ergänzt KI-Analyse (falls Schlüssel vorhanden), baut docs/index.html, meldet per Telegram."""
+import os, json, datetime as dt, requests
 from zoneinfo import ZoneInfo
 
 FD = os.environ["FOOTBALL_DATA_TOKEN"]
-COMPS = os.environ.get("COMPETITIONS", "BL1")          # z. B. BL1,PL,PD (Bundesliga, Premier League, La Liga)
-MODEL = os.environ.get("MODEL", "claude-sonnet-5-5")
+COMPS = os.environ.get("COMPETITIONS") or "BL1"          # z. B. BL1,PL,PD
+MODEL = os.environ.get("MODEL") or "claude-sonnet-5-5"
 SITE = os.environ.get("SITE_URL", "")
 TG_TOKEN, TG_CHAT = os.environ.get("TELEGRAM_TOKEN"), os.environ.get("TELEGRAM_CHAT_ID")
 TZ = ZoneInfo("Europe/Berlin")
-client = anthropic.Anthropic()
+
+client = None
+if os.environ.get("ANTHROPIC_API_KEY"):
+    import anthropic
+    client = anthropic.Anthropic()
 
 def fd(path, **params):
     r = requests.get("https://api.football-data.org/v4" + path, params=params,
@@ -28,6 +32,14 @@ def row(table, team_id):
             return {k: r.get(k) for k in ("position", "playedGames", "won", "draw", "lost",
                                           "points", "goalsFor", "goalsAgainst", "form")}
     return None
+
+def basic_facts(m, home, away):
+    out = []
+    for name, r in ((m["homeTeam"]["name"], home), (m["awayTeam"]["name"], away)):
+        if r:
+            out.append(f'{name}: Platz {r["position"]}, {r["points"]} Punkte aus {r["playedGames"]} Spielen, '
+                       f'Tore {r["goalsFor"]}:{r["goalsAgainst"]}.')
+    return out or ["Zu diesem Spiel liegen noch keine Tabellendaten vor."]
 
 PROMPT = """Du bist ein vorsichtiger Fußball-Analyst. Nutze AUSSCHLIESSLICH die folgenden Daten.
 Erfinde keine Verletzungen, Aufstellungen, Nachrichten oder Statistiken, die nicht in den Daten stehen.
@@ -52,22 +64,35 @@ def main():
     tables, new_ids = {}, []
     for m in matches:
         mid = str(m["id"])
+        is_new = mid not in state["matches"]
         ko = dt.datetime.fromisoformat(m["utcDate"].replace("Z", "+00:00")).astimezone(TZ)
         ft = m["score"]["fullTime"]
         entry = state["matches"].get(mid, {})
         entry.update({"liga": m["competition"]["name"], "zeit": ko.strftime("%d.%m. %H:%M"), "ts": ko.isoformat(),
                       "heim": m["homeTeam"]["name"], "gast": m["awayTeam"]["name"],
                       "score": f'{ft["home"]}:{ft["away"]}' if ft["home"] is not None else ""})
-        if "analyse" not in entry:
+        need_facts, need_ai = "fakten" not in entry, bool(client) and "analyse" not in entry
+        ai_added = False
+        if need_facts or need_ai:
             code = m["competition"]["code"]
-            if code not in tables:
-                tables[code] = fd(f"/competitions/{code}/standings")["standings"][0]["table"]
             try:
-                entry.update(analyse(m, row(tables[code], m["homeTeam"]["id"]), row(tables[code], m["awayTeam"]["id"])))
-                new_ids.append(mid)
+                if code not in tables:
+                    tables[code] = [r for s in fd(f"/competitions/{code}/standings")["standings"] for r in s["table"]]
+                home, away = row(tables[code], m["homeTeam"]["id"]), row(tables[code], m["awayTeam"]["id"])
             except Exception as e:
-                print("Analyse fehlgeschlagen für", mid, e)
+                print("Tabelle nicht verfügbar für", code, e)
+                home = away = None
+            if need_facts:
+                entry["fakten"] = basic_facts(m, home, away)
+            if need_ai:
+                try:
+                    entry.update(analyse(m, home, away))
+                    ai_added = True
+                except Exception as e:
+                    print("Analyse fehlgeschlagen für", mid, e)
         state["matches"][mid] = entry
+        if is_new or ai_added:
+            new_ids.append(mid)
     cutoff = (dt.datetime.now(TZ) - dt.timedelta(days=2)).isoformat()
     state["matches"] = {k: v for k, v in state["matches"].items() if v.get("ts", "") > cutoff}
     state["updated"] = dt.datetime.now(TZ).strftime("%d.%m.%Y %H:%M")
@@ -77,11 +102,11 @@ def main():
     data = json.dumps(state, ensure_ascii=False).replace("</", "<\\/")
     open("docs/index.html", "w", encoding="utf-8").write(HTML.replace("__DATA__", data))
     if new_ids and TG_TOKEN and TG_CHAT:
-        text = f"⚽ {len(new_ids)} neue Analyse(n) verfügbar.\n{SITE}\n\nUnverbindlich, keine Garantie. Nur ab 18."
+        text = f"⚽ {len(new_ids)} neue(s) Spiel(e) bzw. Analyse(n) verfügbar.\n{SITE}\n\nUnverbindlich, keine Garantie. Nur ab 18."
         requests.post(f"https://api.telegram.org/bot{TG_TOKEN}/sendMessage", data={"chat_id": TG_CHAT, "text": text}, timeout=30)
 
 HTML = """<!DOCTYPE html><html lang="de"><head><meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1"><title>Anstoß Analyse</title>
+<meta name="viewport" content="width=device-width, initial-scale=1"><title>Klarvio Fußball</title>
 <style>
 :root{--bg:#F5F3FA;--card:#fff;--ink:#231942;--mute:#645C7D;--line:#DDD8EA;--teal:#0F8B8D;--soft:#E3F3F3;--warn:#FFE9A8;--wi:#4A3A00}
 @media(prefers-color-scheme:dark){:root{--bg:#14102A;--card:#1E1940;--ink:#F0EDFA;--mute:#A9A2C4;--line:#322B5C;--teal:#4FD1D3;--soft:#1C3A4A;--warn:#4A3A00;--wi:#FFE9A8}}
@@ -97,25 +122,27 @@ summary{list-style:none;cursor:pointer;padding:14px;display:grid;gap:4px}summary
 .b{display:grid;grid-template-columns:90px 1fr 40px;gap:8px;align-items:center;font-size:.85rem;margin-top:6px}
 .tr{height:10px;background:var(--soft);border-radius:6px;overflow:hidden}.f{height:100%;background:var(--teal)}
 .tip{background:var(--soft);border-radius:10px;padding:10px 12px;margin-top:14px}.tip small{display:block;color:var(--mute)}
+.no{color:var(--mute);font-size:.88rem;margin-top:12px}
 footer{margin-top:24px;font-size:.8rem;color:var(--mute)}
 </style></head><body><main>
-<h1>Anstoß Analyse</h1>
-<div class="w">Nur ab 18. Unverbindliche Analysen einer KI auf Basis von Tabellendaten. Keine Garantie, Wetten können zu Verlusten führen.</div>
+<h1>Klarvio Fußball</h1>
+<div class="w">Nur ab 18. Informationen auf Basis von Tabellendaten, teils mit unverbindlicher KI-Analyse. Keine Garantie, Wetten können zu Verlusten führen.</div>
 <div class="s" id="u"></div><div class="l" id="l"></div>
 <footer>Keine Gewinnversprechen. Spielen kann süchtig machen. Hilfe: 0800 1 37 27 00 (BZgA), check-dein-spiel.de.</footer></main>
 <script>
 const D=__DATA__;
 const E=s=>String(s).replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
 const L=["Heimsieg","Unentschieden","Auswärtssieg"];
-document.getElementById("u").textContent="Zuletzt aktualisiert: "+D.updated+" Uhr. Neue Analyse jede Stunde.";
-const items=Object.entries(D.matches).sort((a,b)=>a[1].ts<b[1].ts?-1:1).filter(x=>x[1].analyse);
+document.getElementById("u").textContent="Zuletzt aktualisiert: "+D.updated+" Uhr. Neue Daten jede Stunde.";
+const items=Object.entries(D.matches).sort((a,b)=>a[1].ts<b[1].ts?-1:1);
 document.getElementById("l").innerHTML=items.length?items.map(([id,m])=>`<details><summary>
 <div class="m"><span>${E(m.liga)} · ${E(m.zeit)} Uhr${m.score?" · Ergebnis "+E(m.score):""}</span>${(D.new||[]).includes(id)?'<span class="n">Neu</span>':""}</div>
-<div class="t">${E(m.heim)} – ${E(m.gast)}</div><div class="k">Unverbindliche Einschätzung: ${E(m.tipp)}</div></summary>
-<div class="d"><h3>Fakten</h3><ul>${m.fakten.map(f=>`<li>${E(f)}</li>`).join("")}</ul>
-<h3>Analyse</h3><p>${E(m.analyse)}</p><h3>Modellschätzung</h3>
+<div class="t">${E(m.heim)} – ${E(m.gast)}</div>${m.tipp?`<div class="k">Unverbindliche Einschätzung: ${E(m.tipp)}</div>`:""}</summary>
+<div class="d"><h3>Fakten</h3><ul>${(m.fakten||[]).map(f=>`<li>${E(f)}</li>`).join("")}</ul>
+${m.analyse?`<h3>Analyse</h3><p>${E(m.analyse)}</p><h3>Modellschätzung</h3>
 ${m.p.map((v,i)=>`<div class="b"><span>${L[i]}</span><div class="tr"><div class="f" style="width:${+v}%"></div></div><span>${+v} %</span></div>`).join("")}
-<div class="tip"><b>${E(m.tipp)}</b> (${E(m.note)})<small>Unverbindlich, ohne Gewähr. Kein Ergebnis ist sicher.</small></div></div></details>`).join("")
+<div class="tip"><b>${E(m.tipp)}</b> (${E(m.note)})<small>Unverbindlich, ohne Gewähr. Kein Ergebnis ist sicher.</small></div>`
+:'<p class="no">Die KI-Analyse ist noch nicht aktiviert.</p>'}</div></details>`).join("")
 :'<p class="s">Heute keine Spiele in den ausgewählten Ligen.</p>';
 </script></body></html>"""
 
