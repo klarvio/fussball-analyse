@@ -6,7 +6,7 @@
    "ts": "2026-10-09T20:30:00+02:00",
    "heim": "Borussia Dortmund",
    "gast": "SV Werder Bremen",
-   "score": "0:0",
+   "score": "1:0",
    "fakten": [
     "Borussia Dortmund: Platz 1, 12 Punkte aus 4 Spielen, Tore 9:2.",
     "SV Werder Bremen: Platz 8, 7 Punkte aus 4 Spielen, Tore 8:8."
@@ -114,7 +114,7 @@
    "ts": "2026-10-09T20:45:00+02:00",
    "heim": "Racing Club de Lens",
    "gast": "Olympique Lyonnais",
-   "score": "0:0",
+   "score": "1:0",
    "fakten": [
     "Racing Club de Lens: Platz 15, 4 Punkte aus 5 Spielen, Tore 9:9.",
     "Olympique Lyonnais: Platz 2, 11 Punkte aus 5 Spielen, Tore 10:2."
@@ -126,7 +126,7 @@
    "ts": "2026-10-09T21:00:00+02:00",
    "heim": "Málaga CF",
    "gast": "RCD Espanyol de Barcelona",
-   "score": "0:0",
+   "score": "0:1",
    "fakten": [
     "Málaga CF: Platz 20, 3 Punkte aus 7 Spielen, Tore 3:12.",
     "RCD Espanyol de Barcelona: Platz 15, 7 Punkte aus 7 Spielen, Tore 10:10."
@@ -457,6 +457,6 @@
    ]
   }
  },
- "updated": "09.10.2026 21:16",
+ "updated": "09.10.2026 22:16",
  "new": []
 }
