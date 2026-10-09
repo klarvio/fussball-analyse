@@ -59,8 +59,18 @@ def analyse(m, home, away):
 def main():
     state = load_state()
     today = dt.date.today()
-    matches = fd("/matches", competitions=COMPS, dateFrom=today.isoformat(),
-                 dateTo=(today + dt.timedelta(days=1)).isoformat()).get("matches", [])
+    d_from, d_to = today.isoformat(), (today + dt.timedelta(days=1)).isoformat()
+    resp = fd("/matches", competitions=COMPS, dateFrom=d_from, dateTo=d_to)
+    matches = resp.get("matches", [])
+    print("DIAGNOSE Zeitraum:", d_from, "bis", d_to, "| Ligen:", COMPS, "| Spiele:", len(matches),
+          "| resultSet:", resp.get("resultSet"), "| filters:", resp.get("filters"))
+    if not matches:
+        for c in COMPS.split(","):
+            try:
+                n = len(fd("/matches", competitions=c.strip(), dateFrom=d_from, dateTo=d_to).get("matches", []))
+                print("DIAGNOSE", c, "->", n, "Spiele")
+            except Exception as e:
+                print("DIAGNOSE", c, "-> Fehler:", e)
     tables, new_ids = {}, []
     for m in matches:
         mid = str(m["id"])
