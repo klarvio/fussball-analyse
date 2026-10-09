@@ -6,7 +6,8 @@ FD = os.environ["FOOTBALL_DATA_TOKEN"].strip()
 COMPS = (os.environ.get("COMPETITIONS") or "BL1").replace(" ", "").strip()          # z. B. BL1,PL,PD
 MODEL = os.environ.get("MODEL") or "claude-sonnet-5-5"
 SITE = os.environ.get("SITE_URL", "")
-TG_TOKEN, TG_CHAT = os.environ.get("TELEGRAM_TOKEN"), os.environ.get("TELEGRAM_CHAT_ID")
+TG_TOKEN = (os.environ.get("TELEGRAM_TOKEN") or "").strip()
+TG_CHAT = (os.environ.get("TELEGRAM_CHAT_ID") or "").strip()
 TZ = ZoneInfo("Europe/Berlin")
 
 client = None
@@ -123,9 +124,17 @@ def main():
     os.makedirs("docs", exist_ok=True)
     data = json.dumps(state, ensure_ascii=False).replace("</", "<\\/")
     open("docs/index.html", "w", encoding="utf-8").write(HTML.replace("__DATA__", data))
-    if new_ids and TG_TOKEN and TG_CHAT:
-        text = f"⚽ {len(new_ids)} neue(s) Spiel(e) bzw. Analyse(n) verfügbar.\n{SITE}\n\nUnverbindlich, keine Garantie. Nur ab 18."
-        requests.post(f"https://api.telegram.org/bot{TG_TOKEN}/sendMessage", data={"chat_id": TG_CHAT, "text": text}, timeout=30)
+    def tg(text):
+        if not (TG_TOKEN and TG_CHAT):
+            print("TELEGRAM: Token oder Chat-ID fehlt (Secret nicht gesetzt?)")
+            return
+        r = requests.post(f"https://api.telegram.org/bot{TG_TOKEN}/sendMessage",
+                          data={"chat_id": TG_CHAT, "text": text}, timeout=30)
+        print("TELEGRAM:", r.status_code, r.text[:200])
+    if os.environ.get("GITHUB_EVENT_NAME") == "workflow_dispatch":
+        tg("✅ Testnachricht: Der Bot läuft.")
+    if new_ids:
+        tg(f"⚽ {len(new_ids)} neue(s) Spiel(e) bzw. Analyse(n) verfügbar.\n{SITE}\n\nUnverbindlich, keine Garantie. Nur ab 18.")
 
 HTML = """<!DOCTYPE html><html lang="de"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1"><title>Klarvio Fußball</title>
