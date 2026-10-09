@@ -59,12 +59,18 @@ def analyse(m, home, away):
 def main():
     state = load_state()
     today = dt.date.today()
-    d_from, d_to = today.isoformat(), (today + dt.timedelta(days=1)).isoformat()
+    days = int(os.environ.get("DAYS") or 4)
+    d_from, d_to = today.isoformat(), (today + dt.timedelta(days=days)).isoformat()
     resp = fd("/matches", competitions=COMPS, dateFrom=d_from, dateTo=d_to)
     matches = resp.get("matches", [])
     print("DIAGNOSE Zeitraum:", d_from, "bis", d_to, "| Ligen:", COMPS, "| Spiele:", len(matches),
           "| resultSet:", resp.get("resultSet"), "| filters:", resp.get("filters"))
     if not matches:
+        try:
+            info = fd("/competitions/" + COMPS.split(",")[0].strip())
+            print("DIAGNOSE Saison:", info.get("currentSeason"))
+        except Exception as e:
+            print("DIAGNOSE Saison-Abfrage Fehler:", e)
         for c in COMPS.split(","):
             try:
                 n = len(fd("/matches", competitions=c.strip(), dateFrom=d_from, dateTo=d_to).get("matches", []))
