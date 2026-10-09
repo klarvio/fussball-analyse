@@ -2,8 +2,8 @@
 import os, json, datetime as dt, requests
 from zoneinfo import ZoneInfo
 
-FD = os.environ["FOOTBALL_DATA_TOKEN"]
-COMPS = os.environ.get("COMPETITIONS") or "BL1"          # z. B. BL1,PL,PD
+FD = os.environ["FOOTBALL_DATA_TOKEN"].strip()
+COMPS = (os.environ.get("COMPETITIONS") or "BL1").replace(" ", "").strip()          # z. B. BL1,PL,PD
 MODEL = os.environ.get("MODEL") or "claude-sonnet-5-5"
 SITE = os.environ.get("SITE_URL", "")
 TG_TOKEN, TG_CHAT = os.environ.get("TELEGRAM_TOKEN"), os.environ.get("TELEGRAM_CHAT_ID")
@@ -71,6 +71,12 @@ def main():
             print("DIAGNOSE Saison:", info.get("currentSeason"))
         except Exception as e:
             print("DIAGNOSE Saison-Abfrage Fehler:", e)
+        try:
+            lst = fd("/competitions")
+            print("DIAGNOSE Token-Länge:", len(FD), "| erreichbare Ligen:",
+                  [c.get("code") for c in lst.get("competitions", [])])
+        except Exception as e:
+            print("DIAGNOSE Ligenliste Fehler:", e, "| Token-Länge:", len(FD))
         for c in COMPS.split(","):
             try:
                 n = len(fd("/matches", competitions=c.strip(), dateFrom=d_from, dateTo=d_to).get("matches", []))
