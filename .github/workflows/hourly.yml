@@ -23,6 +23,10 @@ jobs:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
           AI_MAX_MONTH: ${{ vars.AI_MAX_MONTH }}
           AI_MAX_RUN: ${{ vars.AI_MAX_RUN }}
+          IMP_NAME: ${{ vars.IMP_NAME }}
+          IMP_ADRESSE: ${{ vars.IMP_ADRESSE }}
+          IMP_EMAIL: ${{ vars.IMP_EMAIL }}
+          IMP_TELEFON: ${{ vars.IMP_TELEFON }}
           TELEGRAM_TOKEN: ${{ secrets.TELEGRAM_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
           SITE_URL: ${{ vars.SITE_URL }}
