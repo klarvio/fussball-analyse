@@ -126,6 +126,10 @@ def tip_set(t):
 def tipp_prob(t, p):
     return p[0] + p[1] if "1X" in t else p[1] + p[2] if "X2" in t else p[0] if t == "Heimsieg" else p[2] if t == "Auswärtssieg" else p[1]
 
+TOP_DEFAULT = ("real madrid,fc barcelona,barça,bayern,manchester city,man city,manchester united,man united,liverpool,arsenal,"
+               "chelsea,tottenham,atlético de madrid,atleti,juventus,internazionale,=inter,ac milan,=milan,napoli,paris saint,psg,"
+               "dortmund,leverkusen,benfica,fc porto,=porto,sporting cp,ajax,as roma,=roma")
+
 def digest(matches, hist, today_key):
     """Morgen-Nachricht (HTML) mit den stärksten Tipps des Tages. None, wenn heute keine Spiele anstehen."""
     wd = ["Mo", "Di", "Mi", "Do", "Fr", "Sa", "So"]
@@ -280,6 +284,7 @@ def main():
     state["matches"] = {k: v for k, v in state["matches"].items() if v.get("ts", "") > cutoff}
     state["updated"] = dt.datetime.now(TZ).strftime("%d.%m.%Y %H:%M")
     state["legal"] = {k: (os.environ.get(v) or "").strip() for k, v in (("name", "IMP_NAME"), ("adr", "IMP_ADRESSE"), ("mail", "IMP_EMAIL"), ("tel", "IMP_TELEFON"), ("nif", "IMP_NIF"), ("reg", "IMP_REGISTRO"))}
+    state["top"] = [x.strip().lower() for x in (os.environ.get("TOP_CLUBS") or TOP_DEFAULT).split(",") if x.strip()]
     sup = (os.environ.get("SUPPORT_URL") or "").strip()
     state["support"] = sup if sup.startswith("https://") else ""
     state["new"] = new_ids
@@ -435,7 +440,8 @@ const posOf=(k,id)=>{const r=(C[k]||{table:[]}).table.find(x=>x.id==id);return r
 const tp=m=>{if(!m.p)return 0;const p=m.p,t=m.tipp||"";return t.includes("1X")?p[0]+p[1]:t.includes("X2")?p[1]+p[2]:t==="Heimsieg"?p[0]:t==="Auswärtssieg"?p[2]:p[1]};
 const upc=ms.filter(x=>x[1].st==="TIMED"||x[1].st==="SCHEDULED"),ck=Object.keys(C);
 const soon=d=>upc.filter(x=>new Date(x[1].ts)<Date.now()+d*864e5);
-const tops=()=>soon(3).map(x=>[posOf(x[1].code,x[1].hid)+posOf(x[1].code,x[1].gid)+ck.indexOf(x[1].code)*2,x]).sort((a,b)=>a[0]-b[0]).slice(0,4).map(x=>x[1]).sort((a,b)=>a[1].ts<b[1].ts?-1:1);
+const TOPS=D.top||[],isTop=n=>{n=(n||"").toLowerCase();return TOPS.some(t=>t[0]==="="?n===t.slice(1):n.includes(t))},tsc=m=>(isTop(m.heim)?1:0)+(isTop(m.gast)?1:0);
+const tops=k=>(k?ms.filter(x=>x[1].ts.slice(0,10)===k):soon(3)).filter(x=>tsc(x[1])>0).sort((a,b)=>tsc(b[1])-tsc(a[1])||(a[1].ts<b[1].ts?-1:1)).slice(0,6);
 const tid=n=>Object.keys(T).find(i=>T[i].name===n);
 const side=()=>ck.map(k=>`<details><summary>${E(C[k].name)}</summary><a class="sl" href="#l/${k}"><b>Zur Liga ›</b></a>${C[k].table.map(r=>`<a class="sl" href="#t/${r.id}">${E(r.n)}</a>`).join("")}</details>`).join("")||'<p class="no" style="padding:10px">Noch keine Ligen.</p>';
 let ltab="t";
@@ -478,7 +484,7 @@ else if(r==="lig")b='<h2 class="ph2">Ligen</h2><div class="sidec">'+side()+'</di
 else if(r==="imp")b=vImp();else if(r==="dsv")b=vDsv();
 else if(r==="hot")b=hot();
 else if(r==="fav"){const f=ms.filter(x=>fav.includes("t"+x[1].hid)||fav.includes("t"+x[1].gid));b='<h2 class="ph2">Favoriten</h2>'+(fav.length?"":'<p class="no">Tippe auf einer Teamseite auf den Stern, um Favoriten zu speichern.</p>')+(f.length?list(f):"")}
-else{const g=tops();b=hero()+(g.length?`<div class="lg">Top Spiele</div><div class="box">${g.map(row).join("")}</div>`:"")+`<div class="lg">Alle Spiele · ${E(dn(day))}</div>`+list(ms.filter(x=>x[1].ts.slice(0,10)===day))+supCard()}
+else{const g=tops(day);b=hero()+(g.length?`<div class="lg">Top Spiele</div><div class="box">${g.map(row).join("")}</div>`:"")+`<div class="lg">Alle Spiele · ${E(dn(day))}</div>`+list(ms.filter(x=>x[1].ts.slice(0,10)===day))+supCard()}
 v.innerHTML=TT(b+disc);document.documentElement.lang=LANG;q.placeholder=TT("Suche");if(r!=="m"||mtab==="u")window.scrollTo(0,0)}
 const q=document.getElementById("q"),qr=document.getElementById("qr");
 q.addEventListener("input",()=>{const t=q.value.trim().toLowerCase();if(t.length<2){qr.innerHTML="";return}
