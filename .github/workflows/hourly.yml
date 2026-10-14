@@ -30,6 +30,7 @@ jobs:
           IMP_NIF: ${{ vars.IMP_NIF }}
           IMP_REGISTRO: ${{ vars.IMP_REGISTRO }}
           SUPPORT_URL: ${{ vars.SUPPORT_URL }}
+          TOP_CLUBS: ${{ vars.TOP_CLUBS }}
           TELEGRAM_TOKEN: ${{ secrets.TELEGRAM_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
           SITE_URL: ${{ vars.SITE_URL }}
