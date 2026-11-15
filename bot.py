@@ -156,6 +156,69 @@ def digest(matches, hist, today_key):
               "", "🔞 Nur ab 18 · Unverbindlich, keine Garantie"]
     return "\n".join(lines)
 
+AF_KEY = (os.environ.get("APIFOOTBALL_KEY") or "").strip()
+AF_LEAGUES = [x.strip() for x in (os.environ.get("EXTRA_LEAGUES") or "5").split(",") if x.strip()]  # 5 = UEFA Nations League
+
+def af(path, **p):
+    """Zweite Datenquelle (API-Football), nur für zusätzliche Wettbewerbe. Kostenloser Tarif: 100 Abfragen pro Tag."""
+    r = requests.get("https://v3.football.api-sports.io" + path, params=p, headers={"x-apisports-key": AF_KEY}, timeout=30)
+    time.sleep(1)
+    r.raise_for_status()
+    j = r.json()
+    print("EXTRA", path, "->", j.get("results"), "Ergebnisse | Abfragen übrig heute:", r.headers.get("x-ratelimit-requests-remaining"))
+    if j.get("errors"):
+        raise RuntimeError(str(j["errors"]))
+    return j.get("response", [])
+
+def conv(fx, code, lname):
+    """API-Football-Spiel in das Format von football-data.org umwandeln."""
+    f, t, g = fx["fixture"], fx["teams"], fx["goals"]
+    s = f["status"]["short"]
+    st = "TIMED" if s in ("NS", "TBD") else "FINISHED" if s in ("FT", "AET", "PEN", "AWD", "WO") else "POSTPONED" if s in ("PST", "CANC", "ABD", "SUSP") else "IN_PLAY"
+    ft = (fx.get("score") or {}).get("fulltime") or {}
+    return {"id": "af" + str(f["id"]), "utcDate": f["date"], "status": st, "matchday": None,
+            "competition": {"code": code, "name": lname},
+            "score": {"fullTime": {"home": g["home"], "away": g["away"]},
+                      "regularTime": {"home": ft.get("home"), "away": ft.get("away")}},
+            "homeTeam": {"id": "af" + str(t["home"]["id"]), "name": t["home"]["name"], "shortName": t["home"]["name"]},
+            "awayTeam": {"id": "af" + str(t["away"]["id"]), "name": t["away"]["name"], "shortName": t["away"]["name"]}}
+
+def extra_league(state, lid, today, days):
+    code = "AF" + lid
+    cache = state.setdefault("xcache", {})
+    c, now = cache.get(code), dt.datetime.now(TZ)
+    if c and (now - dt.datetime.fromisoformat(c["ts"])).total_seconds() < 7200:
+        return c                      # höchstens alle 2 Stunden neu abfragen, spart Abfragen
+    season = os.environ.get("EXTRA_SEASON") or (today.year if today.month >= 8 else today.year - 1)
+    try:
+        up = af("/fixtures", league=lid, season=season, **{"from": today.isoformat(), "to": (today + dt.timedelta(days=days)).isoformat()})
+        fin = af("/fixtures", league=lid, season=season, status="FT-AET-PEN",
+                 **{"from": (today - dt.timedelta(days=35)).isoformat(), "to": today.isoformat()})
+        st = af("/standings", league=lid, season=season)
+    except Exception as e:
+        print("EXTRA Fehler bei Liga", lid, ":", e, "| Die Zusatzliga wird übersprungen.")
+        return c
+    lname = (st[0]["league"]["name"] if st else None) or "UEFA Nations League"
+    rows = [{"team": {"id": "af" + str(r["team"]["id"]), "name": r["team"]["name"], "shortName": r["team"]["name"]},
+             "position": r["rank"], "playedGames": r["all"]["played"], "won": r["all"]["win"], "draw": r["all"]["draw"],
+             "lost": r["all"]["lose"], "points": r["points"], "goalsFor": r["all"]["goals"]["for"],
+             "goalsAgainst": r["all"]["goals"]["against"], "goalDifference": r.get("goalsDiff"), "form": r.get("form")}
+            for grp in (st[0]["league"]["standings"] if st else []) for r in grp]
+    c = {"ts": now.isoformat(timespec="minutes"), "code": code, "name": lname, "rows": rows,
+         "up": [conv(x, code, lname) for x in up], "fin": [conv(x, code, lname) for x in fin]}
+    cache[code] = c
+    return c
+
+def add_form(state, x):
+    ft = x["score"]["fullTime"]
+    if ft["home"] is None:
+        return
+    for side, other, a, b in (("homeTeam", "awayTeam", ft["home"], ft["away"]), ("awayTeam", "homeTeam", ft["away"], ft["home"])):
+        t = state["teams"].setdefault(str(x[side]["id"]), {})
+        t["name"] = x[side]["shortName"]
+        t.setdefault("_f", []).append({"opp": x[other]["shortName"], "sc": f"{a}:{b}",
+                                       "r": "S" if a > b else "N" if a < b else "U", "home": side == "homeTeam"})
+
 def safe(path, **p):
     try:
         return fd(path, **p)
@@ -199,6 +262,21 @@ def main():
                 t.setdefault("_f", []).append({"opp": x[other].get("shortName") or x[other]["name"], "sc": f"{mine}:{theirs}",
                                               "r": "S" if mine > theirs else "N" if mine < theirs else "U",
                                               "home": side == "homeTeam"})
+    xfin = []
+    if AF_KEY:
+        for lid in AF_LEAGUES:
+            c = extra_league(state, lid, today, days)
+            if not c:
+                continue
+            tables[c["code"]] = c["rows"]
+            state["comps"][c["code"]] = {"name": c["name"], "scorers": [], "table": [
+                {"id": r["team"]["id"], "n": r["team"]["name"], "pos": r["position"], "pl": r["playedGames"],
+                 "pts": r["points"], "gd": r["goalDifference"]} for r in c["rows"]]}
+            matches = matches + c["up"]
+            xfin += c["fin"]
+            for x in sorted(c["fin"], key=lambda z: z["utcDate"]):
+                add_form(state, x)
+            print("EXTRA", c["name"], ":", len(c["up"]), "Spiele,", len(c["rows"]), "Tabellenzeilen")
     for t in state["teams"].values():
         t["form"] = t.pop("_f", t.get("form", []))[-5:]
     for m in matches:
@@ -217,11 +295,11 @@ def main():
         for side in ("homeTeam", "awayTeam"):
             tid = str(m[side]["id"])
             t = state["teams"].setdefault(tid, {"name": m[side]["name"]})
-            if near and "squad" not in t:
+            if near and "squad" not in t and not tid.startswith("af"):
                 d = safe(f"/teams/{tid}")
                 t.update({"venue": d.get("venue"), "coach": (d.get("coach") or {}).get("name"),
                           "squad": [{"n": p["name"], "p": p.get("position")} for p in d.get("squad", [])]})
-        if near and "h2h" not in entry:
+        if near and "h2h" not in entry and not mid.startswith("af"):
             h = safe(f"/matches/{mid}/head2head", limit=5).get("matches", [])
             entry["h2h"] = [{"d": x["utcDate"][:10], "h": x["homeTeam"].get("shortName") or x["homeTeam"]["name"],
                              "a": x["awayTeam"].get("shortName") or x["awayTeam"]["name"],
@@ -272,7 +350,7 @@ def main():
                          "pm": tipp_prob(e["tipp"], e["p"])}
     fin_all = safe("/matches", competitions=COMPS, status="FINISHED",
                    dateFrom=(today - dt.timedelta(days=2)).isoformat(), dateTo=today.isoformat()).get("matches", [])
-    for x in fin_all:
+    for x in fin_all + xfin:
         h = hist.get(str(x["id"]))
         sc = x["score"].get("regularTime") or x["score"]["fullTime"]
         if h and "res" not in h and sc["home"] is not None:
